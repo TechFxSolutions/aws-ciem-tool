@@ -1,20 +1,88 @@
-# Cleanup Scripts
+# Scripts Directory
 
-This directory contains cleanup scripts for the AWS CIEM Tool.
+This directory contains utility scripts for the AWS CIEM Tool.
 
 ## ⚠️ IMPORTANT NOTICE
 
 **The AWS CIEM Tool does NOT create any AWS resources.** It only reads and analyzes existing resources in your AWS account.
 
-These scripts are provided for:
-1. **Local cleanup** - Remove Docker containers and data
-2. **Future use** - When auto-remediation or test environment features are added
+---
+
+## 📋 **Scripts Overview**
+
+### 1. `install-prerequisites-windows.ps1` - Windows Prerequisites Installer
+
+**Purpose**: Automatically install all required tools on Windows.
+
+**What it installs**:
+- ✅ Chocolatey (package manager)
+- ✅ Docker Desktop
+- ✅ Git
+- ✅ AWS CLI (optional)
+- ✅ VS Code (optional)
+- ✅ Enables WSL 2 and required Windows features
+
+**Requirements**:
+- Windows 10/11 (64-bit)
+- Administrator privileges
+- Internet connection
+
+**Usage**:
+```powershell
+# Open PowerShell as Administrator
+# Navigate to project directory
+cd aws-ciem-tool
+
+# Install all prerequisites (including optional tools)
+.\scripts\install-prerequisites-windows.ps1
+
+# Install only required tools (skip AWS CLI and VS Code)
+.\scripts\install-prerequisites-windows.ps1 -SkipOptional
+
+# Skip Docker installation (if already installed)
+.\scripts\install-prerequisites-windows.ps1 -SkipDocker
+
+# Skip Git installation (if already installed)
+.\scripts\install-prerequisites-windows.ps1 -SkipGit
+```
+
+**Example Output**:
+```
+╔════════════════════════════════════════════════════════════╗
+║     AWS CIEM Tool - Windows Prerequisites Installer       ║
+╚════════════════════════════════════════════════════════════╝
+
+[1/7] Checking administrator privileges...
+  ✓ Running as Administrator
+  ✓ Windows version compatible
+
+[2/7] Checking Windows features...
+  ✓ Microsoft-Windows-Subsystem-Linux already enabled
+  ✓ VirtualMachinePlatform already enabled
+
+[3/7] Installing Chocolatey package manager...
+  ✓ Chocolatey installed successfully
+
+[4/7] Installing Docker Desktop...
+  ✓ Docker Desktop installed
+
+[5/7] Installing Git...
+  ✓ Git installed successfully
+
+[6/7] Installing AWS CLI (optional)...
+  ✓ AWS CLI installed successfully
+
+[7/7] Installing VS Code (optional)...
+  ✓ VS Code installed successfully
+
+╔════════════════════════════════════════════════════════════╗
+║              Installation Complete!                        ║
+╚════════════════════════════════════════════════════════════╝
+```
 
 ---
 
-## Scripts Overview
-
-### 1. `cleanup.sh` - Local Resources Cleanup
+### 2. `cleanup.sh` - Local Resources Cleanup
 
 **Purpose**: Remove all local Docker resources created by the CIEM tool.
 
@@ -68,7 +136,7 @@ Starting cleanup...
 
 ---
 
-### 2. `aws-cleanup.sh` - AWS Resources Cleanup (Future Use)
+### 3. `aws-cleanup.sh` - AWS Resources Cleanup (Future Use)
 
 **Purpose**: Delete AWS resources tagged with `Project=AWS-CIEM-Tool`.
 
@@ -131,16 +199,79 @@ Starting AWS resource discovery...
 
 ---
 
-## Safety Features
+## 🚀 **Quick Start Workflow**
 
-### Local Cleanup Script (`cleanup.sh`)
+### **For Windows Users**:
+
+1. **Install Prerequisites**
+   ```powershell
+   # Run as Administrator
+   .\scripts\install-prerequisites-windows.ps1
+   ```
+
+2. **Restart Computer** (if prompted)
+
+3. **Start Docker Desktop** (from Start Menu)
+
+4. **Clone Repository** (if not already done)
+   ```powershell
+   git clone https://github.com/TechFxSolutions/aws-ciem-tool.git
+   cd aws-ciem-tool
+   ```
+
+5. **Configure Environment**
+   ```powershell
+   cp .env.example .env
+   # Edit .env with your AWS credentials
+   ```
+
+6. **Start Application**
+   ```powershell
+   docker-compose up -d
+   ```
+
+### **For macOS/Linux Users**:
+
+1. **Install Prerequisites** (see `PREREQUISITES.md`)
+
+2. **Clone Repository**
+   ```bash
+   git clone https://github.com/TechFxSolutions/aws-ciem-tool.git
+   cd aws-ciem-tool
+   ```
+
+3. **Configure Environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your AWS credentials
+   ```
+
+4. **Start Application**
+   ```bash
+   docker-compose up -d
+   ```
+
+---
+
+## 🛡️ **Safety Features**
+
+### **Installation Script** (`install-prerequisites-windows.ps1`)
+- ✅ Requires Administrator privileges
+- ✅ Checks Windows version compatibility
+- ✅ Verifies each installation
+- ✅ Provides detailed progress output
+- ✅ Handles errors gracefully
+- ✅ Optional tools can be skipped
+- ✅ Prompts for restart if needed
+
+### **Local Cleanup Script** (`cleanup.sh`)
 - ✅ Confirmation prompt before deletion
 - ✅ Option to keep scan data (`--keep-data`)
 - ✅ Shows what will be removed before proceeding
 - ✅ Provides summary of removed resources
 - ✅ Safe to run multiple times
 
-### AWS Cleanup Script (`aws-cleanup.sh`)
+### **AWS Cleanup Script** (`aws-cleanup.sh`)
 - ✅ Dry run mode to preview changes
 - ✅ Requires typing "DELETE" to confirm
 - ✅ Only deletes resources with specific tag
@@ -150,15 +281,21 @@ Starting AWS resource discovery...
 
 ---
 
-## When to Use Each Script
+## 📊 **When to Use Each Script**
 
-### Use `cleanup.sh` when:
+### **Use `install-prerequisites-windows.ps1` when**:
+- ✅ Setting up a new Windows machine
+- ✅ You don't have Docker or Git installed
+- ✅ You want automated installation
+- ✅ You're new to development tools
+
+### **Use `cleanup.sh` when**:
 - ✅ You want to completely remove the CIEM tool from your machine
 - ✅ You want to free up disk space
 - ✅ You want to start fresh with a clean installation
 - ✅ You're done testing and want to clean up
 
-### Use `aws-cleanup.sh` when:
+### **Use `aws-cleanup.sh` when**:
 - ⏳ **FUTURE**: When the tool adds resource creation features
 - ⏳ **FUTURE**: When you've created test AWS resources with the project tag
 - ⏳ **FUTURE**: When auto-remediation creates temporary resources
@@ -166,31 +303,35 @@ Starting AWS resource discovery...
 
 ---
 
-## Tagging Strategy (For Future Use)
+## 🐛 **Troubleshooting**
 
-When the tool starts creating AWS resources, they will be tagged with:
+### **Windows Installation Issues**
 
-```json
-{
-  "Project": "AWS-CIEM-Tool",
-  "ManagedBy": "CIEM-Tool",
-  "Environment": "production|development|test",
-  "CreatedBy": "auto-remediation|test-environment",
-  "CreatedAt": "2025-12-11T10:30:00Z"
-}
+**Problem**: "Script execution is disabled"
+```powershell
+# Solution: Enable script execution
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 
-This allows:
-- Easy identification of tool-created resources
-- Automated cleanup
-- Cost tracking
-- Compliance auditing
+**Problem**: "Not running as Administrator"
+```powershell
+# Solution: Right-click PowerShell and select "Run as Administrator"
+```
 
----
+**Problem**: Chocolatey installation fails
+```powershell
+# Solution: Install manually
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+```
 
-## Troubleshooting
+**Problem**: Docker Desktop won't start
+- Enable Hyper-V and WSL 2 in Windows Features
+- Update Windows to latest version
+- Check BIOS virtualization settings (VT-x/AMD-V must be enabled)
 
-### Local Cleanup Issues
+### **Local Cleanup Issues**
 
 **Problem**: "Permission denied" error
 ```bash
@@ -211,18 +352,14 @@ docker stop $(docker ps -aq --filter name=ciem)
 docker volume rm $(docker volume ls -q | grep ciem) --force
 ```
 
-### AWS Cleanup Issues
+### **AWS Cleanup Issues**
 
 **Problem**: "AWS CLI not found"
 ```bash
 # Solution: Install AWS CLI
-# macOS
-brew install awscli
-
-# Linux
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
-sudo ./aws/install
+# Windows: choco install awscli
+# macOS: brew install awscli
+# Linux: See PREREQUISITES.md
 ```
 
 **Problem**: "Invalid credentials"
@@ -243,61 +380,34 @@ aws configure --profile default
 
 ---
 
-## Best Practices
+## 📚 **Additional Resources**
 
-### Before Running Cleanup
-
-1. **Backup Important Data**
-   ```bash
-   # Export scan results
-   docker exec ciem-postgres pg_dump -U ciem_user ciem_db > backup.sql
-   
-   # Export Neo4j data
-   docker exec ciem-neo4j neo4j-admin dump --database=neo4j --to=/data/backup.dump
-   ```
-
-2. **Review What Will Be Deleted**
-   ```bash
-   # For local cleanup
-   docker-compose ps
-   docker volume ls | grep ciem
-   
-   # For AWS cleanup (dry run)
-   ./scripts/aws-cleanup.sh --dry-run
-   ```
-
-3. **Test in Non-Production First**
-   - Always test cleanup scripts in development environment
-   - Verify backups before running in production
-
-### After Running Cleanup
-
-1. **Verify Cleanup**
-   ```bash
-   # Check Docker resources
-   docker ps -a | grep ciem
-   docker volume ls | grep ciem
-   docker images | grep ciem
-   
-   # Check AWS resources (if applicable)
-   aws ec2 describe-instances --filters "Name=tag:Project,Values=AWS-CIEM-Tool"
-   ```
-
-2. **Reinstall if Needed**
-   ```bash
-   # Reinstall CIEM tool
-   docker-compose up -d
-   ```
+- **Prerequisites Guide**: See `PREREQUISITES.md` for detailed requirements
+- **Quick Start Guide**: See `QUICKSTART.md` for usage instructions
+- **Architecture**: See `docs/ARCHITECTURE.md` for system design
+- **AWS Setup**: See `docs/AWS_SETUP.md` for AWS configuration
 
 ---
 
-## FAQ
+## ❓ **FAQ**
+
+**Q: Do I need to run the installation script if I already have Docker?**  
+A: No, you can skip Docker installation with `-SkipDocker` flag.
+
+**Q: Will the installation script modify my existing tools?**  
+A: No, it checks if tools are already installed and skips them.
+
+**Q: Can I run the installation script multiple times?**  
+A: Yes, it's safe to run multiple times. It will skip already installed tools.
+
+**Q: Do I need to restart after installation?**  
+A: Usually yes, especially if Windows features were enabled or Docker was installed.
 
 **Q: Will cleanup.sh delete my AWS resources?**  
 A: No. It only removes local Docker containers and data. Your AWS resources are untouched.
 
 **Q: Will aws-cleanup.sh delete all my AWS resources?**  
-A: No. It only deletes resources tagged with `Project=AWS-CIEM-Tool`. Currently, the CIEM tool doesn't create any AWS resources, so this script won't find anything to delete.
+A: No. It only deletes resources tagged with `Project=AWS-CIEM-Tool`. Currently, the CIEM tool doesn't create any AWS resources.
 
 **Q: Can I recover data after running cleanup.sh?**  
 A: No, unless you backed up the Docker volumes first. Always backup important scan data before cleanup.
@@ -305,26 +415,6 @@ A: No, unless you backed up the Docker volumes first. Always backup important sc
 **Q: Is it safe to run cleanup scripts multiple times?**  
 A: Yes. Both scripts are idempotent and safe to run multiple times.
 
-**Q: Do I need AWS credentials to run cleanup.sh?**  
-A: No. The local cleanup script doesn't interact with AWS at all.
-
-**Q: Can I customize what gets deleted?**  
-A: Yes. Both scripts are bash scripts you can modify. Read the code and adjust as needed.
-
 ---
 
-## Support
-
-If you encounter issues with cleanup scripts:
-
-1. Check the troubleshooting section above
-2. Review script output for error messages
-3. Open an issue on GitHub with:
-   - Script name
-   - Command you ran
-   - Error message
-   - Your environment (OS, Docker version, AWS CLI version)
-
----
-
-**Remember**: The CIEM tool is read-only. It doesn't create AWS resources, so the AWS cleanup script is for future use only.
+**For more help, see `PREREQUISITES.md` or open an issue on GitHub.**
