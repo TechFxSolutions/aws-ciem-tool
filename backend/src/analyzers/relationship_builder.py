@@ -66,6 +66,31 @@ class RelationshipBuilder:
         logger.info(f"Relationship building completed: {result['summary']}")
         return result
     
+    def _normalize_node_id(self, resource_type: str, resource_id: str) -> str:
+        """
+        Normalize node ID to match the format used in graph nodes
+        
+        Args:
+            resource_type: Type of resource (e.g., 'ec2_instance', 'lambda_function')
+            resource_id: Resource identifier
+            
+        Returns:
+            Normalized node ID
+        """
+        # Map resource types to prefixes
+        type_prefix_map = {
+            "iam_role": "role",
+            "iam_user": "user",
+            "ec2_instance": "ec2",
+            "lambda_function": "lambda",
+            "s3_bucket": "s3",
+            "rds_instance": "rds",
+            "security_group": "sg",
+        }
+        
+        prefix = type_prefix_map.get(resource_type, resource_type)
+        return f"{prefix}-{resource_id}"
+    
     def _build_role_resource_map(self, iam_data: Dict, resource_data: Dict) -> Dict[str, Any]:
         """
         Build mapping of IAM roles to resources (Level 4 → Level 3)
@@ -98,15 +123,10 @@ class RelationshipBuilder:
                     "resource_id": instance["instance_id"],
                     "resource_name": instance["name"],
                     "is_public": instance.get("is_public", False),
-                    "security_groups": [sg["group_id"] for sg in instance.get("security_groups", [])],
-                    "vpc_id": instance.get("vpc_id"),
-                    "state": instance.get("state"),
+                    "security_groups": instance.get("security_groups", []),
                 }
                 role_map[iam_profile]["resources"].append(resource_info)
-                
-                # Add security groups
-                for sg in instance.get("security_groups", []):
-                    role_map[iam_profile]["security_groups"].add(sg["group_id"])
+                role_map[iam_profile]["security_groups"].update(instance.get("security_groups", []))
                 
                 # Create relationship
                 self.relationships.append({
@@ -114,46 +134,46 @@ class RelationshipBuilder:
                     "source_type": "iam_role",
                     "target": instance["instance_id"],
                     "target_type": "ec2_instance",
-                    "relationship_type": "assumes_role",
+                    "relationship_type": "assumes",
                 })
         
         # Map Lambda functions to roles
         for function in resource_data.get("lambda_functions", []):
-            role_name = function.get("role")
-            if role_name and role_name in role_map:
-                resource_info = {
-                    "resource_type": "lambda_function",
-                    "resource_id": function["function_name"],
-                    "resource_name": function["function_name"],
-                    "is_in_vpc": function.get("is_in_vpc", False),
-                    "security_groups": function.get("security_groups", []),
-                    "runtime": function.get("runtime"),
-                }
-                role_map[role_name]["resources"].append(resource_info)
+            role_arn = function.get("role")
+            if role_arn:
+                # Extract role name from ARN
+                role_name = role_arn.split("/")[-1] if "/" in role_arn else role_arn
                 
-                # Add security groups
-                for sg_id in function.get("security_groups", []):
-                    role_map[role_name]["security_groups"].add(sg_id)
-                
-                # Create relationship
-                self.relationships.append({
-                    "source": role_name,
-                    "source_type": "iam_role",
-                    "target": function["function_name"],
-                    "target_type": "lambda_function",
-                    "relationship_type": "execution_role",
-                })
+                if role_name in role_map:
+                    resource_info = {
+                        "resource_type": "lambda_function",
+                        "resource_id": function["function_name"],
+                        "resource_name": function["function_name"],
+                        "runtime": function.get("runtime"),
+                        "security_groups": function.get("security_groups", []),
+                    }
+                    role_map[role_name]["resources"].append(resource_info)
+                    role_map[role_name]["security_groups"].update(function.get("security_groups", []))
+                    
+                    # Create relationship
+                    self.relationships.append({
+                        "source": role_name,
+                        "source_type": "iam_role",
+                        "target": function["function_name"],
+                        "target_type": "lambda_function",
+                        "relationship_type": "assumes",
+                    })
         
-        # Convert sets to lists for JSON serialization
-        for role_name in role_map:
-            role_map[role_name]["security_groups"] = list(role_map[role_name]["security_groups"])
+        # Convert security_groups sets to lists
+        for role_data in role_map.values():
+            role_data["security_groups"] = list(role_data["security_groups"])
         
-        logger.info(f"Mapped {len(role_map)} roles to resources")
+        logger.info(f"Mapped {len(role_map)} IAM roles to resources")
         return role_map
     
     def _build_security_group_map(self, resource_data: Dict) -> Dict[str, Any]:
         """
-        Build mapping of security groups to resources (Level 5 → Level 3)
+        Build mapping of security groups to resources (Level 3 → Level 5)
         
         Returns:
             Dictionary mapping security group IDs to their resources
@@ -161,7 +181,7 @@ class RelationshipBuilder:
         logger.info("Building security group mappings")
         sg_map = {}
         
-        # Initialize all security groups
+        # Initialize from security_groups data
         for sg in resource_data.get("security_groups", []):
             sg_id = sg["group_id"]
             sg_map[sg_id] = {
@@ -169,73 +189,98 @@ class RelationshipBuilder:
                 "group_name": sg["group_name"],
                 "vpc_id": sg.get("vpc_id"),
                 "has_internet_access": sg.get("has_internet_access", False),
-                "risky_rules": sg.get("risky_rules", []),
-                "ingress_rules": sg.get("ingress_rules", []),
-                "egress_rules": sg.get("egress_rules", []),
+                "allows_all_traffic": sg.get("allows_all_traffic", False),
                 "resources": [],
             }
         
         # Map EC2 instances to security groups
         for instance in resource_data.get("ec2_instances", []):
-            for sg in instance.get("security_groups", []):
-                sg_id = sg["group_id"]
-                if sg_id in sg_map:
-                    sg_map[sg_id]["resources"].append({
-                        "resource_type": "ec2_instance",
-                        "resource_id": instance["instance_id"],
-                        "resource_name": instance["name"],
-                        "is_public": instance.get("is_public", False),
-                        "iam_role": instance.get("iam_instance_profile"),
-                    })
-                    
-                    # Create relationship
-                    self.relationships.append({
-                        "source": instance["instance_id"],
-                        "source_type": "ec2_instance",
-                        "target": sg_id,
-                        "target_type": "security_group",
-                        "relationship_type": "protected_by",
-                    })
+            for sg_id in instance.get("security_groups", []):
+                if sg_id not in sg_map:
+                    # Create SG entry if not exists
+                    sg_map[sg_id] = {
+                        "group_id": sg_id,
+                        "group_name": sg_id,
+                        "vpc_id": None,
+                        "has_internet_access": False,
+                        "allows_all_traffic": False,
+                        "resources": [],
+                    }
+                
+                sg_map[sg_id]["resources"].append({
+                    "resource_type": "ec2_instance",
+                    "resource_id": instance["instance_id"],
+                    "resource_name": instance["name"],
+                    "is_public": instance.get("is_public", False),
+                    "iam_role": instance.get("iam_instance_profile"),
+                })
+                
+                # Create relationship
+                self.relationships.append({
+                    "source": instance["instance_id"],
+                    "source_type": "ec2_instance",
+                    "target": sg_id,
+                    "target_type": "security_group",
+                    "relationship_type": "protected_by",
+                })
         
         # Map Lambda functions to security groups
         for function in resource_data.get("lambda_functions", []):
             for sg_id in function.get("security_groups", []):
-                if sg_id in sg_map:
-                    sg_map[sg_id]["resources"].append({
-                        "resource_type": "lambda_function",
-                        "resource_id": function["function_name"],
-                        "resource_name": function["function_name"],
-                        "iam_role": function.get("role"),
-                    })
-                    
-                    # Create relationship
-                    self.relationships.append({
-                        "source": function["function_name"],
-                        "source_type": "lambda_function",
-                        "target": sg_id,
-                        "target_type": "security_group",
-                        "relationship_type": "protected_by",
-                    })
+                if sg_id not in sg_map:
+                    sg_map[sg_id] = {
+                        "group_id": sg_id,
+                        "group_name": sg_id,
+                        "vpc_id": None,
+                        "has_internet_access": False,
+                        "allows_all_traffic": False,
+                        "resources": [],
+                    }
+                
+                sg_map[sg_id]["resources"].append({
+                    "resource_type": "lambda_function",
+                    "resource_id": function["function_name"],
+                    "resource_name": function["function_name"],
+                    "iam_role": function.get("role"),
+                })
+                
+                # Create relationship
+                self.relationships.append({
+                    "source": function["function_name"],
+                    "source_type": "lambda_function",
+                    "target": sg_id,
+                    "target_type": "security_group",
+                    "relationship_type": "protected_by",
+                })
         
         # Map RDS instances to security groups
         for instance in resource_data.get("rds_instances", []):
             for sg_id in instance.get("security_groups", []):
-                if sg_id in sg_map:
-                    sg_map[sg_id]["resources"].append({
-                        "resource_type": "rds_instance",
-                        "resource_id": instance["db_instance_identifier"],
-                        "resource_name": instance["db_instance_identifier"],
-                        "publicly_accessible": instance.get("publicly_accessible", False),
-                    })
-                    
-                    # Create relationship
-                    self.relationships.append({
-                        "source": instance["db_instance_identifier"],
-                        "source_type": "rds_instance",
-                        "target": sg_id,
-                        "target_type": "security_group",
-                        "relationship_type": "protected_by",
-                    })
+                if sg_id not in sg_map:
+                    sg_map[sg_id] = {
+                        "group_id": sg_id,
+                        "group_name": sg_id,
+                        "vpc_id": None,
+                        "has_internet_access": False,
+                        "allows_all_traffic": False,
+                        "resources": [],
+                    }
+                
+                sg_map[sg_id]["resources"].append({
+                    "resource_type": "rds_instance",
+                    "resource_id": instance["db_instance_identifier"],
+                    "resource_name": instance["db_instance_identifier"],
+                    "publicly_accessible": instance.get("publicly_accessible", False),
+                })
+                
+                # Create relationship
+                self.relationships.append({
+                    "source": instance["db_instance_identifier"],
+                    "source_type": "rds_instance",
+                    "target": sg_id,
+                    "target_type": "security_group",
+                    "relationship_type": "protected_by",
+                })
         
         logger.info(f"Mapped {len(sg_map)} security groups to resources")
         return sg_map
@@ -298,24 +343,27 @@ class RelationshipBuilder:
         return consolidated
     
     def _calculate_role_risk(self, role_data: Dict, sg_mappings: Dict) -> int:
-        """Calculate risk score for a role based on its resources and permissions"""
+        """
+        Calculate risk score for a role based on its resources and permissions
+        
+        Returns:
+            Risk score (0-100)
+        """
         risk_score = 0
         
-        # Admin roles are high risk
+        # Admin role = high risk
         if role_data.get("is_admin"):
-            risk_score += 40
+            risk_score += 50
         
-        # Public resources increase risk
-        public_resources = sum(1 for r in role_data["resources"] if r.get("is_public"))
-        risk_score += public_resources * 15
-        
-        # Security groups with Internet access increase risk
-        for sg_id in role_data["security_groups"]:
-            if sg_id in sg_mappings and sg_mappings[sg_id].get("has_internet_access"):
+        # Public resources = risk
+        for resource in role_data["resources"]:
+            if resource.get("is_public"):
                 risk_score += 20
         
-        # Number of resources
-        risk_score += len(role_data["resources"]) * 2
+        # Internet-accessible security groups = risk
+        for sg_id in role_data["security_groups"]:
+            if sg_id in sg_mappings and sg_mappings[sg_id].get("has_internet_access"):
+                risk_score += 15
         
         return min(100, risk_score)
     
@@ -335,7 +383,7 @@ class RelationshipBuilder:
         # Add IAM role nodes
         for role_name, role_data in role_mappings.items():
             if role_data["resources"]:  # Only include roles with resources
-                node_id = f"role-{role_name}"
+                node_id = self._normalize_node_id("iam_role", role_name)
                 if node_id not in node_ids:
                     nodes.append({
                         "id": node_id,
@@ -350,7 +398,7 @@ class RelationshipBuilder:
         # Add security group nodes
         for sg_id, sg_data in sg_mappings.items():
             if sg_data["resources"]:  # Only include SGs with resources
-                node_id = f"sg-{sg_id}"
+                node_id = self._normalize_node_id("security_group", sg_id)
                 if node_id not in node_ids:
                     nodes.append({
                         "id": node_id,
@@ -364,7 +412,7 @@ class RelationshipBuilder:
         
         # Add resource nodes
         for instance in resource_data.get("ec2_instances", []):
-            node_id = f"ec2-{instance['instance_id']}"
+            node_id = self._normalize_node_id("ec2_instance", instance['instance_id'])
             if node_id not in node_ids:
                 nodes.append({
                     "id": node_id,
@@ -377,7 +425,7 @@ class RelationshipBuilder:
                 node_ids.add(node_id)
         
         for function in resource_data.get("lambda_functions", []):
-            node_id = f"lambda-{function['function_name']}"
+            node_id = self._normalize_node_id("lambda_function", function['function_name'])
             if node_id not in node_ids:
                 nodes.append({
                     "id": node_id,
@@ -385,6 +433,30 @@ class RelationshipBuilder:
                     "type": "lambda_function",
                     "group": "compute",
                     "runtime": function.get("runtime"),
+                })
+                node_ids.add(node_id)
+        
+        for bucket in resource_data.get("s3_buckets", []):
+            node_id = self._normalize_node_id("s3_bucket", bucket['bucket_name'])
+            if node_id not in node_ids:
+                nodes.append({
+                    "id": node_id,
+                    "label": bucket["bucket_name"],
+                    "type": "s3_bucket",
+                    "group": "storage",
+                    "is_public": bucket.get("is_public", False),
+                })
+                node_ids.add(node_id)
+        
+        for instance in resource_data.get("rds_instances", []):
+            node_id = self._normalize_node_id("rds_instance", instance['db_instance_identifier'])
+            if node_id not in node_ids:
+                nodes.append({
+                    "id": node_id,
+                    "label": instance["db_instance_identifier"],
+                    "type": "rds_instance",
+                    "group": "database",
+                    "publicly_accessible": instance.get("publicly_accessible", False),
                 })
                 node_ids.add(node_id)
         
@@ -396,30 +468,31 @@ class RelationshipBuilder:
             "type": "internet",
             "group": "external",
         })
+        node_ids.add(internet_node_id)
         
-        # Add edges from relationships
+        # Add edges from relationships with normalized IDs
         for rel in self.relationships:
-            source_id = f"{rel['source_type']}-{rel['source']}"
-            target_id = f"{rel['target_type']}-{rel['target']}"
+            source_id = self._normalize_node_id(rel['source_type'], rel['source'])
+            target_id = self._normalize_node_id(rel['target_type'], rel['target'])
             
-            # Normalize IDs
-            source_id = source_id.replace("iam_role-", "role-")
-            target_id = target_id.replace("iam_role-", "role-")
-            
-            edges.append({
-                "source": source_id,
-                "target": target_id,
-                "type": rel["relationship_type"],
-            })
+            # Only add edge if both nodes exist
+            if source_id in node_ids and target_id in node_ids:
+                edges.append({
+                    "source": source_id,
+                    "target": target_id,
+                    "type": rel["relationship_type"],
+                })
         
         # Add edges from security groups to Internet
         for sg_id, sg_data in sg_mappings.items():
             if sg_data.get("has_internet_access"):
-                edges.append({
-                    "source": f"sg-{sg_id}",
-                    "target": internet_node_id,
-                    "type": "allows_traffic_from",
-                })
+                source_id = self._normalize_node_id("security_group", sg_id)
+                if source_id in node_ids:
+                    edges.append({
+                        "source": source_id,
+                        "target": internet_node_id,
+                        "type": "allows_traffic_from",
+                    })
         
         graph_data = {
             "nodes": nodes,
@@ -432,6 +505,8 @@ class RelationshipBuilder:
                     "security_groups": sum(1 for n in nodes if n["type"] == "security_group"),
                     "ec2_instances": sum(1 for n in nodes if n["type"] == "ec2_instance"),
                     "lambda_functions": sum(1 for n in nodes if n["type"] == "lambda_function"),
+                    "s3_buckets": sum(1 for n in nodes if n["type"] == "s3_bucket"),
+                    "rds_instances": sum(1 for n in nodes if n["type"] == "rds_instance"),
                 }
             }
         }
