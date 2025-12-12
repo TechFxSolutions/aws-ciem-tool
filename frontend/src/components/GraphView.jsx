@@ -19,6 +19,7 @@ const GraphView = () => {
   const [graphData, setGraphData] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
   const [error, setError] = useState(null);
+  const [stats, setStats] = useState(null);
   const cyRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -76,6 +77,43 @@ const GraphView = () => {
       cyRef.current.destroy();
     }
 
+    // Create a Set of valid node IDs for fast lookup
+    const validNodeIds = new Set(graphData.nodes.map(node => node.id));
+
+    // Filter edges to only include those with valid source and target nodes
+    const validEdges = graphData.edges.filter(edge => {
+      const hasValidSource = validNodeIds.has(edge.source);
+      const hasValidTarget = validNodeIds.has(edge.target);
+      
+      if (!hasValidSource || !hasValidTarget) {
+        console.warn(`Skipping invalid edge: ${edge.source} -> ${edge.target}`, {
+          hasValidSource,
+          hasValidTarget,
+          edgeType: edge.type
+        });
+        return false;
+      }
+      
+      return true;
+    });
+
+    // Calculate statistics
+    const edgeStats = {
+      total: graphData.edges.length,
+      valid: validEdges.length,
+      invalid: graphData.edges.length - validEdges.length
+    };
+
+    if (edgeStats.invalid > 0) {
+      console.warn(`Filtered out ${edgeStats.invalid} invalid edges out of ${edgeStats.total} total edges`);
+    }
+
+    setStats({
+      nodes: graphData.nodes.length,
+      edges: validEdges.length,
+      invalidEdges: edgeStats.invalid
+    });
+
     // Transform data for Cytoscape
     const elements = [
       ...graphData.nodes.map(node => ({
@@ -87,11 +125,13 @@ const GraphView = () => {
           ...node
         }
       })),
-      ...graphData.edges.map(edge => ({
+      ...validEdges.map(edge => ({
         data: {
+          id: `${edge.source}-${edge.target}-${edge.type}`,
           source: edge.source,
           target: edge.target,
-          type: edge.type
+          type: edge.type,
+          label: edge.type
         }
       }))
     ];
@@ -104,14 +144,14 @@ const GraphView = () => {
         {
           selector: 'node',
           style: {
+            'background-color': '#3b82f6',
             'label': 'data(label)',
+            'color': '#1f2937',
             'text-valign': 'center',
             'text-halign': 'center',
-            'font-size': '12px',
-            'width': '60px',
-            'height': '60px',
-            'background-color': '#3b82f6',
-            'color': '#fff',
+            'font-size': '10px',
+            'width': '40px',
+            'height': '40px',
             'text-wrap': 'wrap',
             'text-max-width': '80px'
           }
@@ -120,51 +160,42 @@ const GraphView = () => {
           selector: 'node[type="iam_role"]',
           style: {
             'background-color': '#8b5cf6',
-            'shape': 'roundrectangle'
+            'shape': 'round-rectangle'
           }
         },
         {
-          selector: 'node[type="security_group"]',
+          selector: 'node[type="iam_user"]',
           style: {
-            'background-color': '#f59e0b',
-            'shape': 'diamond'
+            'background-color': '#ec4899',
+            'shape': 'ellipse'
           }
         },
         {
           selector: 'node[type="ec2_instance"]',
           style: {
-            'background-color': '#10b981',
+            'background-color': '#f59e0b',
             'shape': 'rectangle'
           }
         },
         {
           selector: 'node[type="lambda_function"]',
           style: {
+            'background-color': '#10b981',
+            'shape': 'diamond'
+          }
+        },
+        {
+          selector: 'node[type="s3_bucket"]',
+          style: {
             'background-color': '#06b6d4',
-            'shape': 'ellipse'
+            'shape': 'barrel'
           }
         },
         {
-          selector: 'node[type="internet"]',
+          selector: 'node[type="security_group"]',
           style: {
-            'background-color': '#dc2626',
-            'shape': 'star',
-            'width': '80px',
-            'height': '80px'
-          }
-        },
-        {
-          selector: 'node[is_public=true]',
-          style: {
-            'border-width': '3px',
-            'border-color': '#dc2626'
-          }
-        },
-        {
-          selector: 'node[has_internet_access=true]',
-          style: {
-            'border-width': '3px',
-            'border-color': '#ea580c'
+            'background-color': '#ef4444',
+            'shape': 'hexagon'
           }
         },
         {
@@ -179,19 +210,44 @@ const GraphView = () => {
           }
         },
         {
-          selector: 'edge[type="allows_traffic_from"]',
+          selector: 'edge[type="assumes"]',
           style: {
-            'line-color': '#dc2626',
-            'target-arrow-color': '#dc2626',
+            'line-color': '#8b5cf6',
+            'target-arrow-color': '#8b5cf6',
             'line-style': 'dashed'
+          }
+        },
+        {
+          selector: 'edge[type="attached_to"]',
+          style: {
+            'line-color': '#3b82f6',
+            'target-arrow-color': '#3b82f6'
+          }
+        },
+        {
+          selector: 'edge[type="allows_access"]',
+          style: {
+            'line-color': '#10b981',
+            'target-arrow-color': '#10b981'
+          }
+        },
+        {
+          selector: 'edge[type="internet_exposed"]',
+          style: {
+            'line-color': '#ef4444',
+            'target-arrow-color': '#ef4444',
+            'line-style': 'dotted',
+            'width': 3
           }
         },
         {
           selector: ':selected',
           style: {
-            'border-width': '4px',
-            'border-color': '#1e40af',
-            'background-color': '#2563eb'
+            'background-color': '#fbbf24',
+            'line-color': '#fbbf24',
+            'target-arrow-color': '#fbbf24',
+            'border-width': 3,
+            'border-color': '#f59e0b'
           }
         }
       ],
@@ -201,123 +257,162 @@ const GraphView = () => {
         nodeSep: 50,
         rankSep: 100,
         padding: 30
-      }
+      },
+      minZoom: 0.3,
+      maxZoom: 3,
+      wheelSensitivity: 0.2
     });
 
-    // Node click handler
-    cy.on('tap', 'node', (event) => {
-      const node = event.target;
+    // Event handlers
+    cy.on('tap', 'node', (evt) => {
+      const node = evt.target;
       setSelectedNode(node.data());
     });
 
-    // Double click to focus
-    cy.on('dbltap', 'node', (event) => {
-      const node = event.target;
-      cy.animate({
-        fit: {
-          eles: node.neighborhood().add(node),
-          padding: 50
-        },
-        duration: 500
-      });
+    cy.on('tap', (evt) => {
+      if (evt.target === cy) {
+        setSelectedNode(null);
+      }
     });
 
     cyRef.current = cy;
   };
 
-  const resetView = () => {
+  const handleScanChange = (e) => {
+    setSelectedScan(e.target.value);
+    setSelectedNode(null);
+  };
+
+  const handleZoomIn = () => {
     if (cyRef.current) {
-      cyRef.current.fit();
+      cyRef.current.zoom(cyRef.current.zoom() * 1.2);
+      cyRef.current.center();
     }
   };
 
-  const exportImage = () => {
+  const handleZoomOut = () => {
     if (cyRef.current) {
-      const png = cyRef.current.png({ scale: 2 });
-      const link = document.createElement('a');
-      link.download = `ciem-graph-${selectedScan}.png`;
-      link.href = png;
-      link.click();
+      cyRef.current.zoom(cyRef.current.zoom() * 0.8);
+      cyRef.current.center();
+    }
+  };
+
+  const handleFit = () => {
+    if (cyRef.current) {
+      cyRef.current.fit(null, 50);
+    }
+  };
+
+  const handleReset = () => {
+    if (cyRef.current) {
+      cyRef.current.zoom(1);
+      cyRef.current.center();
     }
   };
 
   if (loading) {
     return (
-      <div className="graph-container">
-        <div className="loading">Loading graph...</div>
+      <div className="graph-view-container">
+        <div className="loading">Loading graph data...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="graph-container">
+      <div className="graph-view-container">
         <div className="error">{error}</div>
       </div>
     );
   }
 
+  if (scans.length === 0) {
+    return (
+      <div className="graph-view-container">
+        <div className="no-data">
+          <h2>No Completed Scans</h2>
+          <p>Complete a scan first to view the graph visualization.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="graph-container">
+    <div className="graph-view-container">
       <div className="graph-header">
-        <h1>Relationship Graph</h1>
-        <div className="graph-controls">
+        <div className="header-left">
+          <h1>Infrastructure Graph</h1>
           <select 
             value={selectedScan || ''} 
-            onChange={(e) => setSelectedScan(e.target.value)}
+            onChange={handleScanChange}
             className="scan-selector"
           >
             {scans.map(scan => (
               <option key={scan.scan_id} value={scan.scan_id}>
-                Scan: {scan.scan_id.substring(0, 8)}... ({new Date(scan.started_at).toLocaleDateString()})
+                Scan: {new Date(scan.started_at).toLocaleString()}
               </option>
             ))}
           </select>
-          <button onClick={resetView} className="btn-control">
-            Reset View
+        </div>
+        
+        <div className="graph-controls">
+          <button onClick={handleZoomIn} className="control-btn" title="Zoom In">
+            🔍+
           </button>
-          <button onClick={exportImage} className="btn-control">
-            Export PNG
+          <button onClick={handleZoomOut} className="control-btn" title="Zoom Out">
+            🔍-
+          </button>
+          <button onClick={handleFit} className="control-btn" title="Fit to Screen">
+            ⛶
+          </button>
+          <button onClick={handleReset} className="control-btn" title="Reset View">
+            ↻
           </button>
         </div>
       </div>
 
+      {stats && (
+        <div className="graph-stats">
+          <span className="stat-item">Nodes: {stats.nodes}</span>
+          <span className="stat-item">Edges: {stats.edges}</span>
+          {stats.invalidEdges > 0 && (
+            <span className="stat-item warning">
+              ⚠ {stats.invalidEdges} invalid edge{stats.invalidEdges !== 1 ? 's' : ''} filtered
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="graph-content">
-        <div className="graph-canvas" ref={containerRef} />
+        <div ref={containerRef} className="graph-canvas" />
         
         {selectedNode && (
           <div className="node-details">
             <h3>Node Details</h3>
+            <div className="detail-row">
+              <strong>Type:</strong>
+              <span>{selectedNode.type}</span>
+            </div>
+            <div className="detail-row">
+              <strong>Label:</strong>
+              <span>{selectedNode.label}</span>
+            </div>
+            <div className="detail-row">
+              <strong>ID:</strong>
+              <span className="id-text">{selectedNode.id}</span>
+            </div>
+            {selectedNode.group && (
+              <div className="detail-row">
+                <strong>Group:</strong>
+                <span>{selectedNode.group}</span>
+              </div>
+            )}
             <button 
-              className="close-btn"
               onClick={() => setSelectedNode(null)}
+              className="close-btn"
             >
-              ×
+              Close
             </button>
-            <div className="detail-item">
-              <strong>ID:</strong> {selectedNode.id}
-            </div>
-            <div className="detail-item">
-              <strong>Label:</strong> {selectedNode.label}
-            </div>
-            <div className="detail-item">
-              <strong>Type:</strong> {selectedNode.type}
-            </div>
-            {selectedNode.is_public !== undefined && (
-              <div className="detail-item">
-                <strong>Public:</strong> {selectedNode.is_public ? 'Yes' : 'No'}
-              </div>
-            )}
-            {selectedNode.has_internet_access !== undefined && (
-              <div className="detail-item">
-                <strong>Internet Access:</strong> {selectedNode.has_internet_access ? 'Yes' : 'No'}
-              </div>
-            )}
-            {selectedNode.resource_count !== undefined && (
-              <div className="detail-item">
-                <strong>Resources:</strong> {selectedNode.resource_count}
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -326,28 +421,28 @@ const GraphView = () => {
         <h4>Legend</h4>
         <div className="legend-items">
           <div className="legend-item">
-            <div className="legend-icon iam-role"></div>
+            <span className="legend-icon iam-role"></span>
             <span>IAM Role</span>
           </div>
           <div className="legend-item">
-            <div className="legend-icon security-group"></div>
-            <span>Security Group</span>
+            <span className="legend-icon iam-user"></span>
+            <span>IAM User</span>
           </div>
           <div className="legend-item">
-            <div className="legend-icon ec2"></div>
+            <span className="legend-icon ec2"></span>
             <span>EC2 Instance</span>
           </div>
           <div className="legend-item">
-            <div className="legend-icon lambda"></div>
+            <span className="legend-icon lambda"></span>
             <span>Lambda Function</span>
           </div>
           <div className="legend-item">
-            <div className="legend-icon internet"></div>
-            <span>Internet</span>
+            <span className="legend-icon s3"></span>
+            <span>S3 Bucket</span>
           </div>
           <div className="legend-item">
-            <div className="legend-icon risky"></div>
-            <span>Risky (Red Border)</span>
+            <span className="legend-icon security-group"></span>
+            <span>Security Group</span>
           </div>
         </div>
       </div>
