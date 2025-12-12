@@ -35,7 +35,10 @@ const GraphView = () => {
 
   useEffect(() => {
     if (graphData && containerRef.current) {
-      renderGraph();
+      // Small delay to ensure container is rendered
+      setTimeout(() => {
+        renderGraph();
+      }, 100);
     }
   }, [graphData]);
 
@@ -47,10 +50,13 @@ const GraphView = () => {
       
       if (completedScans.length > 0) {
         setSelectedScan(completedScans[0].scan_id);
+      } else {
+        setLoading(false);
       }
     } catch (err) {
       console.error('Failed to load scans:', err);
       setError('Failed to load scans');
+      setLoading(false);
     }
   };
 
@@ -60,6 +66,7 @@ const GraphView = () => {
       setError(null);
       
       const response = await relationshipAPI.getGraphData(scanId, false);
+      console.log('Graph data loaded:', response.data);
       setGraphData(response.data);
       setLoading(false);
     } catch (err) {
@@ -70,7 +77,15 @@ const GraphView = () => {
   };
 
   const renderGraph = () => {
-    if (!graphData || !containerRef.current) return;
+    if (!graphData || !containerRef.current) {
+      console.warn('Cannot render graph: missing data or container');
+      return;
+    }
+
+    console.log('Rendering graph with data:', {
+      nodes: graphData.nodes?.length,
+      edges: graphData.edges?.length
+    });
 
     // Destroy existing graph
     if (cyRef.current) {
@@ -125,9 +140,9 @@ const GraphView = () => {
           ...node
         }
       })),
-      ...validEdges.map(edge => ({
+      ...validEdges.map((edge, index) => ({
         data: {
-          id: `${edge.source}-${edge.target}-${edge.type}`,
+          id: `edge-${index}-${edge.source}-${edge.target}`,
           source: edge.source,
           target: edge.target,
           type: edge.type,
@@ -135,6 +150,8 @@ const GraphView = () => {
         }
       }))
     ];
+
+    console.log('Creating Cytoscape with elements:', elements.length);
 
     // Create Cytoscape instance
     const cy = cytoscape({
@@ -192,10 +209,26 @@ const GraphView = () => {
           }
         },
         {
+          selector: 'node[type="rds_instance"]',
+          style: {
+            'background-color': '#a855f7',
+            'shape': 'ellipse'
+          }
+        },
+        {
           selector: 'node[type="security_group"]',
           style: {
             'background-color': '#ef4444',
             'shape': 'hexagon'
+          }
+        },
+        {
+          selector: 'node[type="internet"]',
+          style: {
+            'background-color': '#dc2626',
+            'shape': 'star',
+            'width': '50px',
+            'height': '50px'
           }
         },
         {
@@ -225,14 +258,14 @@ const GraphView = () => {
           }
         },
         {
-          selector: 'edge[type="allows_access"]',
+          selector: 'edge[type="protected_by"]',
           style: {
             'line-color': '#10b981',
             'target-arrow-color': '#10b981'
           }
         },
         {
-          selector: 'edge[type="internet_exposed"]',
+          selector: 'edge[type="allows_traffic_from"]',
           style: {
             'line-color': '#ef4444',
             'target-arrow-color': '#ef4444',
@@ -256,12 +289,15 @@ const GraphView = () => {
         rankDir: 'TB',
         nodeSep: 50,
         rankSep: 100,
-        padding: 30
+        padding: 30,
+        animate: false
       },
       minZoom: 0.3,
       maxZoom: 3,
       wheelSensitivity: 0.2
     });
+
+    console.log('Cytoscape instance created');
 
     // Event handlers
     cy.on('tap', 'node', (evt) => {
@@ -273,6 +309,13 @@ const GraphView = () => {
       if (evt.target === cy) {
         setSelectedNode(null);
       }
+    });
+
+    // Fit graph to viewport after layout completes
+    cy.ready(() => {
+      console.log('Cytoscape ready, fitting to viewport');
+      cy.fit(null, 50);
+      cy.center();
     });
 
     cyRef.current = cy;
@@ -405,6 +448,24 @@ const GraphView = () => {
               <div className="detail-row">
                 <strong>Group:</strong>
                 <span>{selectedNode.group}</span>
+              </div>
+            )}
+            {selectedNode.is_admin !== undefined && (
+              <div className="detail-row">
+                <strong>Admin:</strong>
+                <span>{selectedNode.is_admin ? 'Yes' : 'No'}</span>
+              </div>
+            )}
+            {selectedNode.is_public !== undefined && (
+              <div className="detail-row">
+                <strong>Public:</strong>
+                <span>{selectedNode.is_public ? 'Yes' : 'No'}</span>
+              </div>
+            )}
+            {selectedNode.has_internet_access !== undefined && (
+              <div className="detail-row">
+                <strong>Internet Access:</strong>
+                <span>{selectedNode.has_internet_access ? 'Yes' : 'No'}</span>
               </div>
             )}
             <button 
