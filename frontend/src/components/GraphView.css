@@ -1,6 +1,6 @@
 /* GraphView Styles */
 
-.graph-container {
+.graph-view-container {
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -16,6 +16,13 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 1rem;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .graph-header h1 {
@@ -39,7 +46,7 @@
   cursor: pointer;
 }
 
-.btn-control {
+.control-btn {
   padding: 0.5rem 1rem;
   background: #3b82f6;
   color: white;
@@ -48,10 +55,32 @@
   font-size: 0.875rem;
   cursor: pointer;
   transition: background-color 0.2s;
+  min-width: 2.5rem;
 }
 
-.btn-control:hover {
+.control-btn:hover {
   background: #2563eb;
+}
+
+.graph-stats {
+  background: #f3f4f6;
+  padding: 0.75rem 2rem;
+  display: flex;
+  gap: 2rem;
+  font-size: 0.875rem;
+  color: #4b5563;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stat-item.warning {
+  color: #f59e0b;
+  font-weight: 500;
 }
 
 .graph-content {
@@ -59,11 +88,15 @@
   display: flex;
   position: relative;
   overflow: hidden;
+  min-height: 0;
 }
 
 .graph-canvas {
   flex: 1;
   background: white;
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
 }
 
 .node-details {
@@ -77,48 +110,56 @@
   padding: 1.5rem;
   max-height: calc(100% - 2rem);
   overflow-y: auto;
+  z-index: 10;
 }
 
 .node-details h3 {
   font-size: 1.25rem;
   color: #1f2937;
   margin: 0 0 1rem 0;
+  padding-right: 2rem;
+}
+
+.detail-row {
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.detail-row strong {
+  color: #374151;
+  font-weight: 600;
+}
+
+.detail-row span {
+  color: #6b7280;
+}
+
+.id-text {
+  font-family: monospace;
+  font-size: 0.75rem;
+  word-break: break-all;
 }
 
 .close-btn {
   position: absolute;
   top: 1rem;
   right: 1rem;
-  background: none;
+  background: #f3f4f6;
   border: none;
-  font-size: 1.5rem;
+  font-size: 0.875rem;
   color: #6b7280;
   cursor: pointer;
-  padding: 0;
-  width: 2rem;
-  height: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.25rem;
+  transition: background-color 0.2s;
 }
 
 .close-btn:hover {
+  background: #e5e7eb;
   color: #1f2937;
-}
-
-.detail-item {
-  margin-bottom: 0.75rem;
-  font-size: 0.875rem;
-}
-
-.detail-item strong {
-  color: #374151;
-  display: block;
-  margin-bottom: 0.25rem;
-}
-
-.detail-item:last-child {
-  margin-bottom: 0;
 }
 
 .graph-legend {
@@ -158,38 +199,50 @@
   border-radius: 6px;
 }
 
-.legend-icon.security-group {
-  background-color: #f59e0b;
-  transform: rotate(45deg);
+.legend-icon.iam-user {
+  background-color: #ec4899;
+  border-radius: 50%;
 }
 
 .legend-icon.ec2 {
-  background-color: #10b981;
+  background-color: #f59e0b;
   border-radius: 2px;
 }
 
 .legend-icon.lambda {
+  background-color: #10b981;
+  transform: rotate(45deg);
+}
+
+.legend-icon.s3 {
   background-color: #06b6d4;
-  border-radius: 50%;
+  border-radius: 50% 50% 0 0;
 }
 
-.legend-icon.internet {
-  background-color: #dc2626;
-  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+.legend-icon.security-group {
+  background-color: #ef4444;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
 }
 
-.legend-icon.risky {
-  background-color: white;
-  border: 3px solid #dc2626;
-}
-
-.loading, .error {
+.loading, .error, .no-data {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100vh;
   font-size: 1.25rem;
   color: #6b7280;
+  gap: 1rem;
+}
+
+.no-data h2 {
+  color: #1f2937;
+  margin: 0;
+}
+
+.no-data p {
+  color: #6b7280;
+  margin: 0;
 }
 
 .error {
@@ -203,13 +256,23 @@
     align-items: flex-start;
   }
 
-  .graph-controls {
+  .header-left {
     width: 100%;
     flex-direction: column;
+    align-items: flex-start;
   }
 
-  .scan-selector, .btn-control {
+  .graph-controls {
     width: 100%;
+  }
+
+  .scan-selector, .control-btn {
+    width: 100%;
+  }
+
+  .graph-stats {
+    flex-direction: column;
+    gap: 0.5rem;
   }
 
   .node-details {
